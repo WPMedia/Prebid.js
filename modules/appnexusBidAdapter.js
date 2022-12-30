@@ -654,7 +654,8 @@ function newBid(serverBid, rtbBid, bidderRequest) {
     bid.meta = Object.assign({}, bid.meta, { brandId: rtbBid.brand_id });
   }
 
-  if (FEATURES.VIDEO && rtbBid.rtb[VIDEO]) {
+  // if (FEATURES.VIDEO && rtbBid.rtb[VIDEO]) {
+  if (rtbBid.rtb[VIDEO]) {
     // shared video properties used for all 3 contexts
     Object.assign(bid, {
       width: rtbBid.rtb.video.player_width,
