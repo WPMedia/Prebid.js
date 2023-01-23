@@ -1607,7 +1607,9 @@ describe('adapterManager tests', function () {
         const alias = 'aliasBidder';
         adapterManager.aliasBidAdapter(CODE, alias);
         expect(adapterManager.bidderRegistry).to.have.property(alias);
-        expect(adapterManager.videoAdapters).to.include(alias);
+        if (FEATURES.VIDEO) {
+          expect(adapterManager.videoAdapters).to.include(alias);
+        }
       });
     });
 

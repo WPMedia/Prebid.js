@@ -195,9 +195,12 @@ describe('AppNexusAdapter', function () {
         transactionId: '04f2659e-c005-4eb1-a57c-fa93145e3843'
       }];
 
-      let types = ['banner', 'video'];
+      let types = ['banner'];
       if (FEATURES.NATIVE) {
         types.push('native');
+      }
+      if (FEATURES.VIDEO) {
+        types.push('video');
       }
 
       types.forEach(type => {
@@ -228,17 +231,19 @@ describe('AppNexusAdapter', function () {
       expect(payload.tags[0].ad_types).to.not.exist;
     });
 
-    it('should populate the ad_types array on outstream requests', function () {
-      const bidRequest = Object.assign({}, bidRequests[0]);
-      bidRequest.mediaTypes = {};
-      bidRequest.mediaTypes.video = { context: 'outstream' };
+    if (FEATURES.VIDEO) {
+      it('should populate the ad_types array on outstream requests', function () {
+        const bidRequest = Object.assign({}, bidRequests[0]);
+        bidRequest.mediaTypes = {};
+        bidRequest.mediaTypes.video = { context: 'outstream' };
 
-      const request = spec.buildRequests([bidRequest]);
-      const payload = JSON.parse(request.data);
+        const request = spec.buildRequests([bidRequest]);
+        const payload = JSON.parse(request.data);
 
-      expect(payload.tags[0].ad_types).to.deep.equal(['video']);
-      expect(payload.tags[0].hb_source).to.deep.equal(1);
-    });
+        expect(payload.tags[0].ad_types).to.deep.equal(['video']);
+        expect(payload.tags[0].hb_source).to.deep.equal(1);
+      });
+    }
 
     it('sends bid request to ENDPOINT via POST', function () {
       const request = spec.buildRequests(bidRequests);
@@ -246,105 +251,107 @@ describe('AppNexusAdapter', function () {
       expect(request.method).to.equal('POST');
     });
 
-    it('should attach valid video params to the tag', function () {
-      let bidRequest = Object.assign({},
-        bidRequests[0],
-        {
+    if (FEATURES.VIDEO) {
+      it('should attach valid video params to the tag', function () {
+        let bidRequest = Object.assign({},
+          bidRequests[0],
+          {
+            params: {
+              placementId: '10433394',
+              video: {
+                id: 123,
+                minduration: 100,
+                foobar: 'invalid'
+              }
+            }
+          }
+        );
+
+        const request = spec.buildRequests([bidRequest]);
+        const payload = JSON.parse(request.data);
+        expect(payload.tags[0].video).to.deep.equal({
+          id: 123,
+          minduration: 100
+        });
+        expect(payload.tags[0].hb_source).to.deep.equal(1);
+      });
+
+      it('should include ORTB video values when video params were not set', function () {
+        let bidRequest = deepClone(bidRequests[0]);
+        bidRequest.params = {
+          placementId: '1234235',
+          video: {
+            skippable: true,
+            playback_method: ['auto_play_sound_off', 'auto_play_sound_unknown'],
+            context: 'outstream'
+          }
+        };
+        bidRequest.mediaTypes = {
+          video: {
+            playerSize: [640, 480],
+            context: 'outstream',
+            mimes: ['video/mp4'],
+            skip: 0,
+            minduration: 5,
+            api: [1, 5, 6],
+            playbackmethod: [2, 4]
+          }
+        };
+
+        const request = spec.buildRequests([bidRequest]);
+        const payload = JSON.parse(request.data);
+
+        expect(payload.tags[0].video).to.deep.equal({
+          minduration: 5,
+          playback_method: 2,
+          skippable: true,
+          context: 4
+        });
+        expect(payload.tags[0].video_frameworks).to.deep.equal([1, 4])
+      });
+
+      it('should add video property when adUnit includes a renderer', function () {
+        const videoData = {
+          mediaTypes: {
+            video: {
+              context: 'outstream',
+              mimes: ['video/mp4']
+            }
+          },
           params: {
             placementId: '10433394',
             video: {
-              id: 123,
-              minduration: 100,
-              foobar: 'invalid'
+              skippable: true,
+              playback_method: ['auto_play_sound_off']
             }
           }
-        }
-      );
+        };
 
-      const request = spec.buildRequests([bidRequest]);
-      const payload = JSON.parse(request.data);
-      expect(payload.tags[0].video).to.deep.equal({
-        id: 123,
-        minduration: 100
-      });
-      expect(payload.tags[0].hb_source).to.deep.equal(1);
-    });
+        let bidRequest1 = deepClone(bidRequests[0]);
+        bidRequest1 = Object.assign({}, bidRequest1, videoData, {
+          renderer: {
+            url: 'https://test.renderer.url',
+            render: function () { }
+          }
+        });
 
-    it('should include ORTB video values when video params were not set', function () {
-      let bidRequest = deepClone(bidRequests[0]);
-      bidRequest.params = {
-        placementId: '1234235',
-        video: {
+        let bidRequest2 = deepClone(bidRequests[0]);
+        bidRequest2.adUnitCode = 'adUnit_code_2';
+        bidRequest2 = Object.assign({}, bidRequest2, videoData);
+
+        const request = spec.buildRequests([bidRequest1, bidRequest2]);
+        const payload = JSON.parse(request.data);
+        expect(payload.tags[0].video).to.deep.equal({
           skippable: true,
-          playback_method: ['auto_play_sound_off', 'auto_play_sound_unknown'],
-          context: 'outstream'
-        }
-      };
-      bidRequest.mediaTypes = {
-        video: {
-          playerSize: [640, 480],
-          context: 'outstream',
-          mimes: ['video/mp4'],
-          skip: 0,
-          minduration: 5,
-          api: [1, 5, 6],
-          playbackmethod: [2, 4]
-        }
-      };
-
-      const request = spec.buildRequests([bidRequest]);
-      const payload = JSON.parse(request.data);
-
-      expect(payload.tags[0].video).to.deep.equal({
-        minduration: 5,
-        playback_method: 2,
-        skippable: true,
-        context: 4
+          playback_method: 2,
+          custom_renderer_present: true
+        });
+        expect(payload.tags[1].video).to.deep.equal({
+          skippable: true,
+          playback_method: 2
+        });
       });
-      expect(payload.tags[0].video_frameworks).to.deep.equal([1, 4])
-    });
-
-    it('should add video property when adUnit includes a renderer', function () {
-      const videoData = {
-        mediaTypes: {
-          video: {
-            context: 'outstream',
-            mimes: ['video/mp4']
-          }
-        },
-        params: {
-          placementId: '10433394',
-          video: {
-            skippable: true,
-            playback_method: ['auto_play_sound_off']
-          }
-        }
-      };
-
-      let bidRequest1 = deepClone(bidRequests[0]);
-      bidRequest1 = Object.assign({}, bidRequest1, videoData, {
-        renderer: {
-          url: 'https://test.renderer.url',
-          render: function () { }
-        }
-      });
-
-      let bidRequest2 = deepClone(bidRequests[0]);
-      bidRequest2.adUnitCode = 'adUnit_code_2';
-      bidRequest2 = Object.assign({}, bidRequest2, videoData);
-
-      const request = spec.buildRequests([bidRequest1, bidRequest2]);
-      const payload = JSON.parse(request.data);
-      expect(payload.tags[0].video).to.deep.equal({
-        skippable: true,
-        playback_method: 2,
-        custom_renderer_present: true
-      });
-      expect(payload.tags[1].video).to.deep.equal({
-        skippable: true,
-        playback_method: 2
-      });
-    });
+    }
 
     it('should attach valid user params to the tag', function () {
       let bidRequest = Object.assign({},
@@ -581,27 +588,29 @@ describe('AppNexusAdapter', function () {
       expect(payload3.tags.length).to.equal(15);
     });
 
-    it('should contain hb_source value for adpod', function () {
-      let bidRequest = Object.assign({},
-        bidRequests[0],
-        {
-          params: { placementId: '14542875' }
-        },
-        {
-          mediaTypes: {
-            video: {
-              context: 'adpod',
-              playerSize: [640, 480],
-              adPodDurationSec: 300,
-              durationRangeSec: [15, 30],
+    if (FEATURES.VIDEO) {
+      it('should contain hb_source value for adpod', function () {
+        let bidRequest = Object.assign({},
+          bidRequests[0],
+          {
+            params: { placementId: '14542875' }
+          },
+          {
+            mediaTypes: {
+              video: {
+                context: 'adpod',
+                playerSize: [640, 480],
+                adPodDurationSec: 300,
+                durationRangeSec: [15, 30],
+              }
             }
           }
-        }
-      );
-      const request = spec.buildRequests([bidRequest])[0];
-      const payload = JSON.parse(request.data);
-      expect(payload.tags[0].hb_source).to.deep.equal(7);
-    });
+        );
+        const request = spec.buildRequests([bidRequest])[0];
+        const payload = JSON.parse(request.data);
+        expect(payload.tags[0].hb_source).to.deep.equal(7);
+      });
+    }
 
     it('should contain hb_source value for other media', function () {
       let bidRequest = Object.assign({},
@@ -1484,116 +1493,118 @@ describe('AppNexusAdapter', function () {
       expect(result.length).to.equal(0);
     });
 
-    it('handles outstream video responses', function () {
-      let response = {
-        'tags': [{
-          'uuid': '84ab500420319d',
-          'ads': [{
-            'ad_type': 'video',
-            'cpm': 0.500000,
-            'notify_url': 'imptracker.com',
-            'rtb': {
-              'video': {
-                'content': '<!-- VAST Creative -->'
-              }
-            },
-            'javascriptTrackers': '<script type=\'text/javascript\' async=\'true\' src=\'https://cdn.adnxs.com/v/s/152/trk.js#v;vk=appnexus.com-omid;tv=native1-18h;dom_id=%native_dom_id%;st=0;d=1x1;vc=iab;vid_ccr=1;tag_id=13232354;cb=https%3A%2F%2Fams1-ib.adnxs.com%2Fvevent%3Freferrer%3Dhttps253A%252F%252Ftestpages-pmahe.tp.adnxs.net%252F01_basic_single%26e%3DwqT_3QLNB6DNAwAAAwDWAAUBCLfl_-MFEMStk8u3lPTjRxih88aF0fq_2QsqNgkAAAECCCRAEQEHEAAAJEAZEQkAIREJACkRCQAxEQmoMOLRpwY47UhA7UhIAlCDy74uWJzxW2AAaM26dXjzjwWAAQGKAQNVU0SSAQEG8FCYAQGgAQGoAQGwAQC4AQHAAQTIAQLQAQDYAQDgAQDwAQCKAjt1ZignYScsIDI1Mjk4ODUsIDE1NTE4ODkwNzkpO3VmKCdyJywgOTc0OTQ0MDM2HgDwjZIC8QEha0RXaXBnajgtTHdLRUlQTHZpNFlBQ0NjOFZzd0FEZ0FRQVJJN1VoUTR0R25CbGdBWU1rR2FBQndMSGlrTDRBQlVvZ0JwQy1RQVFHWUFRR2dBUUdvQVFPd0FRQzVBZk90YXFRQUFDUkF3UUh6cldxa0FBQWtRTWtCbWo4dDA1ZU84VF9aQVFBQUEBAyRQQV80QUVBOVFFAQ4sQW1BSUFvQUlBdFFJBRAAdg0IeHdBSUF5QUlBNEFJQTZBSUEtQUlBZ0FNQm1BTUJxQVAFzIh1Z01KUVUxVE1UbzBNekl3NEFPVENBLi6aAmEhUXcxdGNRagUoEfQkblBGYklBUW9BRAl8AEEBqAREbzJEABRRSk1JU1EBGwRBQQGsAFURDAxBQUFXHQzwWNgCAOACrZhI6gIzaHR0cDovL3Rlc3RwYWdlcy1wbWFoZS50cC5hZG54cy5uZXQvMDFfYmFzaWNfc2luZ2xl8gITCg9DVVNUT01fTU9ERUxfSUQSAPICGgoWMhYAPExFQUZfTkFNRRIA8gIeCho2HQAIQVNUAT7wnElGSUVEEgCAAwCIAwGQAwCYAxegAwGqAwDAA-CoAcgDANgD8ao-4AMA6AMA-AMBgAQAkgQNL3V0L3YzL3ByZWJpZJgEAKIECjEwLjIuMTIuMzioBIqpB7IEDggAEAEYACAAKAAwADgCuAQAwAQAyAQA0gQOOTMyNSNBTVMxOjQzMjDaBAIIAeAEAfAEg8u-LogFAZgFAKAF______8BAxgBwAUAyQUABQEU8D_SBQkJBQt8AAAA2AUB4AUB8AWZ9CH6BQQIABAAkAYBmAYAuAYAwQYBITAAAPA_yAYA2gYWChAAOgEAGBAAGADgBgw.%26s%3D971dce9d49b6bee447c8a58774fb30b40fe98171;ts=1551889079;cet=0;cecb=\'></script>'
+    if (FEATURES.VIDEO) {
+      it('handles outstream video responses', function () {
+        let response = {
+          'tags': [{
+            'uuid': '84ab500420319d',
+            'ads': [{
+              'ad_type': 'video',
+              'cpm': 0.500000,
+              'notify_url': 'imptracker.com',
+              'rtb': {
+                'video': {
+                  'content': '<!-- VAST Creative -->'
+                }
+              },
+              'javascriptTrackers': '<script type=\'text/javascript\' async=\'true\' src=\'https://cdn.adnxs.com/v/s/152/trk.js#v;vk=appnexus.com-omid;tv=native1-18h;dom_id=%native_dom_id%;st=0;d=1x1;vc=iab;vid_ccr=1;tag_id=13232354;cb=https%3A%2F%2Fams1-ib.adnxs.com%2Fvevent%3Freferrer%3Dhttps253A%252F%252Ftestpages-pmahe.tp.adnxs.net%252F01_basic_single%26e%3DwqT_3QLNB6DNAwAAAwDWAAUBCLfl_-MFEMStk8u3lPTjRxih88aF0fq_2QsqNgkAAAECCCRAEQEHEAAAJEAZEQkAIREJACkRCQAxEQmoMOLRpwY47UhA7UhIAlCDy74uWJzxW2AAaM26dXjzjwWAAQGKAQNVU0SSAQEG8FCYAQGgAQGoAQGwAQC4AQHAAQTIAQLQAQDYAQDgAQDwAQCKAjt1ZignYScsIDI1Mjk4ODUsIDE1NTE4ODkwNzkpO3VmKCdyJywgOTc0OTQ0MDM2HgDwjZIC8QEha0RXaXBnajgtTHdLRUlQTHZpNFlBQ0NjOFZzd0FEZ0FRQVJJN1VoUTR0R25CbGdBWU1rR2FBQndMSGlrTDRBQlVvZ0JwQy1RQVFHWUFRR2dBUUdvQVFPd0FRQzVBZk90YXFRQUFDUkF3UUh6cldxa0FBQWtRTWtCbWo4dDA1ZU84VF9aQVFBQUEBAyRQQV80QUVBOVFFAQ4sQW1BSUFvQUlBdFFJBRAAdg0IeHdBSUF5QUlBNEFJQTZBSUEtQUlBZ0FNQm1BTUJxQVAFzIh1Z01KUVUxVE1UbzBNekl3NEFPVENBLi6aAmEhUXcxdGNRagUoEfQkblBGYklBUW9BRAl8AEEBqAREbzJEABRRSk1JU1EBGwRBQQGsAFURDAxBQUFXHQzwWNgCAOACrZhI6gIzaHR0cDovL3Rlc3RwYWdlcy1wbWFoZS50cC5hZG54cy5uZXQvMDFfYmFzaWNfc2luZ2xl8gITCg9DVVNUT01fTU9ERUxfSUQSAPICGgoWMhYAPExFQUZfTkFNRRIA8gIeCho2HQAIQVNUAT7wnElGSUVEEgCAAwCIAwGQAwCYAxegAwGqAwDAA-CoAcgDANgD8ao-4AMA6AMA-AMBgAQAkgQNL3V0L3YzL3ByZWJpZJgEAKIECjEwLjIuMTIuMzioBIqpB7IEDggAEAEYACAAKAAwADgCuAQAwAQAyAQA0gQOOTMyNSNBTVMxOjQzMjDaBAIIAeAEAfAEg8u-LogFAZgFAKAF______8BAxgBwAUAyQUABQEU8D_SBQkJBQt8AAAA2AUB4AUB8AWZ9CH6BQQIABAAkAYBmAYAuAYAwQYBITAAAPA_yAYA2gYWChAAOgEAGBAAGADgBgw.%26s%3D971dce9d49b6bee447c8a58774fb30b40fe98171;ts=1551889079;cet=0;cecb=\'></script>'
+            }]
           }]
-        }]
-      };
-      let bidderRequest = {
-        bids: [{
-          bidId: '84ab500420319d',
-          adUnitCode: 'code',
-          mediaTypes: {
-            video: {
-              context: 'outstream'
-            }
-          }
-        }]
-      }
-
-      let result = spec.interpretResponse({ body: response }, { bidderRequest });
-      expect(result[0]).to.have.property('vastXml');
-      expect(result[0]).to.have.property('vastImpUrl');
-      expect(result[0]).to.have.property('mediaType', 'video');
-    });
-
-    it('handles instream video responses', function () {
-      let response = {
-        'tags': [{
-          'uuid': '84ab500420319d',
-          'ads': [{
-            'ad_type': 'video',
-            'cpm': 0.500000,
-            'notify_url': 'imptracker.com',
-            'rtb': {
-              'video': {
-                'asset_url': 'https://sample.vastURL.com/here/vid'
+        };
+        let bidderRequest = {
+          bids: [{
+            bidId: '84ab500420319d',
+            adUnitCode: 'code',
+            mediaTypes: {
+              video: {
+                context: 'outstream'
               }
-            },
-            'javascriptTrackers': '<script type=\'text/javascript\' async=\'true\' src=\'https://cdn.adnxs.com/v/s/152/trk.js#v;vk=appnexus.com-omid;tv=native1-18h;dom_id=%native_dom_id%;st=0;d=1x1;vc=iab;vid_ccr=1;tag_id=13232354;cb=https%3A%2F%2Fams1-ib.adnxs.com%2Fvevent%3Freferrer%3Dhttps253A%252F%252Ftestpages-pmahe.tp.adnxs.net%252F01_basic_single%26e%3DwqT_3QLNB6DNAwAAAwDWAAUBCLfl_-MFEMStk8u3lPTjRxih88aF0fq_2QsqNgkAAAECCCRAEQEHEAAAJEAZEQkAIREJACkRCQAxEQmoMOLRpwY47UhA7UhIAlCDy74uWJzxW2AAaM26dXjzjwWAAQGKAQNVU0SSAQEG8FCYAQGgAQGoAQGwAQC4AQHAAQTIAQLQAQDYAQDgAQDwAQCKAjt1ZignYScsIDI1Mjk4ODUsIDE1NTE4ODkwNzkpO3VmKCdyJywgOTc0OTQ0MDM2HgDwjZIC8QEha0RXaXBnajgtTHdLRUlQTHZpNFlBQ0NjOFZzd0FEZ0FRQVJJN1VoUTR0R25CbGdBWU1rR2FBQndMSGlrTDRBQlVvZ0JwQy1RQVFHWUFRR2dBUUdvQVFPd0FRQzVBZk90YXFRQUFDUkF3UUh6cldxa0FBQWtRTWtCbWo4dDA1ZU84VF9aQVFBQUEBAyRQQV80QUVBOVFFAQ4sQW1BSUFvQUlBdFFJBRAAdg0IeHdBSUF5QUlBNEFJQTZBSUEtQUlBZ0FNQm1BTUJxQVAFzIh1Z01KUVUxVE1UbzBNekl3NEFPVENBLi6aAmEhUXcxdGNRagUoEfQkblBGYklBUW9BRAl8AEEBqAREbzJEABRRSk1JU1EBGwRBQQGsAFURDAxBQUFXHQzwWNgCAOACrZhI6gIzaHR0cDovL3Rlc3RwYWdlcy1wbWFoZS50cC5hZG54cy5uZXQvMDFfYmFzaWNfc2luZ2xl8gITCg9DVVNUT01fTU9ERUxfSUQSAPICGgoWMhYAPExFQUZfTkFNRRIA8gIeCho2HQAIQVNUAT7wnElGSUVEEgCAAwCIAwGQAwCYAxegAwGqAwDAA-CoAcgDANgD8ao-4AMA6AMA-AMBgAQAkgQNL3V0L3YzL3ByZWJpZJgEAKIECjEwLjIuMTIuMzioBIqpB7IEDggAEAEYACAAKAAwADgCuAQAwAQAyAQA0gQOOTMyNSNBTVMxOjQzMjDaBAIIAeAEAfAEg8u-LogFAZgFAKAF______8BAxgBwAUAyQUABQEU8D_SBQkJBQt8AAAA2AUB4AUB8AWZ9CH6BQQIABAAkAYBmAYAuAYAwQYBITAAAPA_yAYA2gYWChAAOgEAGBAAGADgBgw.%26s%3D971dce9d49b6bee447c8a58774fb30b40fe98171;ts=1551889079;cet=0;cecb=\'></script>'
-          }]
-        }]
-      };
-      let bidderRequest = {
-        bids: [{
-          bidId: '84ab500420319d',
-          adUnitCode: 'code',
-          mediaTypes: {
-            video: {
-              context: 'instream'
-            }
-          }
-        }]
-      }
-
-      let result = spec.interpretResponse({ body: response }, { bidderRequest });
-      expect(result[0]).to.have.property('vastUrl');
-      expect(result[0]).to.have.property('vastImpUrl');
-      expect(result[0]).to.have.property('mediaType', 'video');
-    });
-
-    it('handles adpod responses', function () {
-      let response = {
-        'tags': [{
-          'uuid': '84ab500420319d',
-          'ads': [{
-            'ad_type': 'video',
-            'brand_category_id': 10,
-            'cpm': 0.500000,
-            'notify_url': 'imptracker.com',
-            'rtb': {
-              'video': {
-                'asset_url': 'https://sample.vastURL.com/here/adpod',
-                'duration_ms': 30000,
-              }
-            },
-            'viewability': {
-              'config': '<script type=\'text/javascript\' async=\'true\' src=\'https://cdn.adnxs.com/v/s/152/trk.js#v;vk=appnexus.com-omid;tv=native1-18h;dom_id=%native_dom_id%;st=0;d=1x1;vc=iab;vid_ccr=1;tag_id=13232354;cb=https%3A%2F%2Fams1-ib.adnxs.com%2Fvevent%3Freferrer%3Dhttps253A%252F%252Ftestpages-pmahe.tp.adnxs.net%252F01_basic_single%26e%3DwqT_3QLNB6DNAwAAAwDWAAUBCLfl_-MFEMStk8u3lPTjRxih88aF0fq_2QsqNgkAAAECCCRAEQEHEAAAJEAZEQkAIREJACkRCQAxEQmoMOLRpwY47UhA7UhIAlCDy74uWJzxW2AAaM26dXjzjwWAAQGKAQNVU0SSAQEG8FCYAQGgAQGoAQGwAQC4AQHAAQTIAQLQAQDYAQDgAQDwAQCKAjt1ZignYScsIDI1Mjk4ODUsIDE1NTE4ODkwNzkpO3VmKCdyJywgOTc0OTQ0MDM2HgDwjZIC8QEha0RXaXBnajgtTHdLRUlQTHZpNFlBQ0NjOFZzd0FEZ0FRQVJJN1VoUTR0R25CbGdBWU1rR2FBQndMSGlrTDRBQlVvZ0JwQy1RQVFHWUFRR2dBUUdvQVFPd0FRQzVBZk90YXFRQUFDUkF3UUh6cldxa0FBQWtRTWtCbWo4dDA1ZU84VF9aQVFBQUEBAyRQQV80QUVBOVFFAQ4sQW1BSUFvQUlBdFFJBRAAdg0IeHdBSUF5QUlBNEFJQTZBSUEtQUlBZ0FNQm1BTUJxQVAFzIh1Z01KUVUxVE1UbzBNekl3NEFPVENBLi6aAmEhUXcxdGNRagUoEfQkblBGYklBUW9BRAl8AEEBqAREbzJEABRRSk1JU1EBGwRBQQGsAFURDAxBQUFXHQzwWNgCAOACrZhI6gIzaHR0cDovL3Rlc3RwYWdlcy1wbWFoZS50cC5hZG54cy5uZXQvMDFfYmFzaWNfc2luZ2xl8gITCg9DVVNUT01fTU9ERUxfSUQSAPICGgoWMhYAPExFQUZfTkFNRRIA8gIeCho2HQAIQVNUAT7wnElGSUVEEgCAAwCIAwGQAwCYAxegAwGqAwDAA-CoAcgDANgD8ao-4AMA6AMA-AMBgAQAkgQNL3V0L3YzL3ByZWJpZJgEAKIECjEwLjIuMTIuMzioBIqpB7IEDggAEAEYACAAKAAwADgCuAQAwAQAyAQA0gQOOTMyNSNBTVMxOjQzMjDaBAIIAeAEAfAEg8u-LogFAZgFAKAF______8BAxgBwAUAyQUABQEU8D_SBQkJBQt8AAAA2AUB4AUB8AWZ9CH6BQQIABAAkAYBmAYAuAYAwQYBITAAAPA_yAYA2gYWChAAOgEAGBAAGADgBgw.%26s%3D971dce9d49b6bee447c8a58774fb30b40fe98171;ts=1551889079;cet=0;cecb=\'></script>'
             }
           }]
-        }]
-      };
+        }
 
-      let bidderRequest = {
-        bids: [{
-          bidId: '84ab500420319d',
-          adUnitCode: 'code',
-          mediaTypes: {
-            video: {
-              context: 'adpod'
+        let result = spec.interpretResponse({ body: response }, { bidderRequest });
+        expect(result[0]).to.have.property('vastXml');
+        expect(result[0]).to.have.property('vastImpUrl');
+        expect(result[0]).to.have.property('mediaType', 'video');
+      });
+
+      it('handles instream video responses', function () {
+        let response = {
+          'tags': [{
+            'uuid': '84ab500420319d',
+            'ads': [{
+              'ad_type': 'video',
+              'cpm': 0.500000,
+              'notify_url': 'imptracker.com',
+              'rtb': {
+                'video': {
+                  'asset_url': 'https://sample.vastURL.com/here/vid'
+                }
+              },
+              'javascriptTrackers': '<script type=\'text/javascript\' async=\'true\' src=\'https://cdn.adnxs.com/v/s/152/trk.js#v;vk=appnexus.com-omid;tv=native1-18h;dom_id=%native_dom_id%;st=0;d=1x1;vc=iab;vid_ccr=1;tag_id=13232354;cb=https%3A%2F%2Fams1-ib.adnxs.com%2Fvevent%3Freferrer%3Dhttps253A%252F%252Ftestpages-pmahe.tp.adnxs.net%252F01_basic_single%26e%3DwqT_3QLNB6DNAwAAAwDWAAUBCLfl_-MFEMStk8u3lPTjRxih88aF0fq_2QsqNgkAAAECCCRAEQEHEAAAJEAZEQkAIREJACkRCQAxEQmoMOLRpwY47UhA7UhIAlCDy74uWJzxW2AAaM26dXjzjwWAAQGKAQNVU0SSAQEG8FCYAQGgAQGoAQGwAQC4AQHAAQTIAQLQAQDYAQDgAQDwAQCKAjt1ZignYScsIDI1Mjk4ODUsIDE1NTE4ODkwNzkpO3VmKCdyJywgOTc0OTQ0MDM2HgDwjZIC8QEha0RXaXBnajgtTHdLRUlQTHZpNFlBQ0NjOFZzd0FEZ0FRQVJJN1VoUTR0R25CbGdBWU1rR2FBQndMSGlrTDRBQlVvZ0JwQy1RQVFHWUFRR2dBUUdvQVFPd0FRQzVBZk90YXFRQUFDUkF3UUh6cldxa0FBQWtRTWtCbWo4dDA1ZU84VF9aQVFBQUEBAyRQQV80QUVBOVFFAQ4sQW1BSUFvQUlBdFFJBRAAdg0IeHdBSUF5QUlBNEFJQTZBSUEtQUlBZ0FNQm1BTUJxQVAFzIh1Z01KUVUxVE1UbzBNekl3NEFPVENBLi6aAmEhUXcxdGNRagUoEfQkblBGYklBUW9BRAl8AEEBqAREbzJEABRRSk1JU1EBGwRBQQGsAFURDAxBQUFXHQzwWNgCAOACrZhI6gIzaHR0cDovL3Rlc3RwYWdlcy1wbWFoZS50cC5hZG54cy5uZXQvMDFfYmFzaWNfc2luZ2xl8gITCg9DVVNUT01fTU9ERUxfSUQSAPICGgoWMhYAPExFQUZfTkFNRRIA8gIeCho2HQAIQVNUAT7wnElGSUVEEgCAAwCIAwGQAwCYAxegAwGqAwDAA-CoAcgDANgD8ao-4AMA6AMA-AMBgAQAkgQNL3V0L3YzL3ByZWJpZJgEAKIECjEwLjIuMTIuMzioBIqpB7IEDggAEAEYACAAKAAwADgCuAQAwAQAyAQA0gQOOTMyNSNBTVMxOjQzMjDaBAIIAeAEAfAEg8u-LogFAZgFAKAF______8BAxgBwAUAyQUABQEU8D_SBQkJBQt8AAAA2AUB4AUB8AWZ9CH6BQQIABAAkAYBmAYAuAYAwQYBITAAAPA_yAYA2gYWChAAOgEAGBAAGADgBgw.%26s%3D971dce9d49b6bee447c8a58774fb30b40fe98171;ts=1551889079;cet=0;cecb=\'></script>'
+            }]
+          }]
+        };
+        let bidderRequest = {
+          bids: [{
+            bidId: '84ab500420319d',
+            adUnitCode: 'code',
+            mediaTypes: {
+              video: {
+                context: 'instream'
+              }
             }
-          }
-        }]
-      };
-      bfStub.returns('1');
+          }]
+        }
 
-      let result = spec.interpretResponse({ body: response }, { bidderRequest });
-      expect(result[0]).to.have.property('vastUrl');
-      expect(result[0].video.context).to.equal('adpod');
-      expect(result[0].video.durationSeconds).to.equal(30);
-    });
+        let result = spec.interpretResponse({ body: response }, { bidderRequest });
+        expect(result[0]).to.have.property('vastUrl');
+        expect(result[0]).to.have.property('vastImpUrl');
+        expect(result[0]).to.have.property('mediaType', 'video');
+      });
+
+      it('handles adpod responses', function () {
+        let response = {
+          'tags': [{
+            'uuid': '84ab500420319d',
+            'ads': [{
+              'ad_type': 'video',
+              'brand_category_id': 10,
+              'cpm': 0.500000,
+              'notify_url': 'imptracker.com',
+              'rtb': {
+                'video': {
+                  'asset_url': 'https://sample.vastURL.com/here/adpod',
+                  'duration_ms': 30000,
+                }
+              },
+              'viewability': {
+                'config': '<script type=\'text/javascript\' async=\'true\' src=\'https://cdn.adnxs.com/v/s/152/trk.js#v;vk=appnexus.com-omid;tv=native1-18h;dom_id=%native_dom_id%;st=0;d=1x1;vc=iab;vid_ccr=1;tag_id=13232354;cb=https%3A%2F%2Fams1-ib.adnxs.com%2Fvevent%3Freferrer%3Dhttps253A%252F%252Ftestpages-pmahe.tp.adnxs.net%252F01_basic_single%26e%3DwqT_3QLNB6DNAwAAAwDWAAUBCLfl_-MFEMStk8u3lPTjRxih88aF0fq_2QsqNgkAAAECCCRAEQEHEAAAJEAZEQkAIREJACkRCQAxEQmoMOLRpwY47UhA7UhIAlCDy74uWJzxW2AAaM26dXjzjwWAAQGKAQNVU0SSAQEG8FCYAQGgAQGoAQGwAQC4AQHAAQTIAQLQAQDYAQDgAQDwAQCKAjt1ZignYScsIDI1Mjk4ODUsIDE1NTE4ODkwNzkpO3VmKCdyJywgOTc0OTQ0MDM2HgDwjZIC8QEha0RXaXBnajgtTHdLRUlQTHZpNFlBQ0NjOFZzd0FEZ0FRQVJJN1VoUTR0R25CbGdBWU1rR2FBQndMSGlrTDRBQlVvZ0JwQy1RQVFHWUFRR2dBUUdvQVFPd0FRQzVBZk90YXFRQUFDUkF3UUh6cldxa0FBQWtRTWtCbWo4dDA1ZU84VF9aQVFBQUEBAyRQQV80QUVBOVFFAQ4sQW1BSUFvQUlBdFFJBRAAdg0IeHdBSUF5QUlBNEFJQTZBSUEtQUlBZ0FNQm1BTUJxQVAFzIh1Z01KUVUxVE1UbzBNekl3NEFPVENBLi6aAmEhUXcxdGNRagUoEfQkblBGYklBUW9BRAl8AEEBqAREbzJEABRRSk1JU1EBGwRBQQGsAFURDAxBQUFXHQzwWNgCAOACrZhI6gIzaHR0cDovL3Rlc3RwYWdlcy1wbWFoZS50cC5hZG54cy5uZXQvMDFfYmFzaWNfc2luZ2xl8gITCg9DVVNUT01fTU9ERUxfSUQSAPICGgoWMhYAPExFQUZfTkFNRRIA8gIeCho2HQAIQVNUAT7wnElGSUVEEgCAAwCIAwGQAwCYAxegAwGqAwDAA-CoAcgDANgD8ao-4AMA6AMA-AMBgAQAkgQNL3V0L3YzL3ByZWJpZJgEAKIECjEwLjIuMTIuMzioBIqpB7IEDggAEAEYACAAKAAwADgCuAQAwAQAyAQA0gQOOTMyNSNBTVMxOjQzMjDaBAIIAeAEAfAEg8u-LogFAZgFAKAF______8BAxgBwAUAyQUABQEU8D_SBQkJBQt8AAAA2AUB4AUB8AWZ9CH6BQQIABAAkAYBmAYAuAYAwQYBITAAAPA_yAYA2gYWChAAOgEAGBAAGADgBgw.%26s%3D971dce9d49b6bee447c8a58774fb30b40fe98171;ts=1551889079;cet=0;cecb=\'></script>'
+              }
+            }]
+          }]
+        };
+
+        let bidderRequest = {
+          bids: [{
+            bidId: '84ab500420319d',
+            adUnitCode: 'code',
+            mediaTypes: {
+              video: {
+                context: 'adpod'
+              }
+            }
+          }]
+        };
+        bfStub.returns('1');
+
+        let result = spec.interpretResponse({ body: response }, { bidderRequest });
+        expect(result[0]).to.have.property('vastUrl');
+        expect(result[0].video.context).to.equal('adpod');
+        expect(result[0].video.durationSeconds).to.equal(30);
+      });
+    }
 
     if (FEATURES.NATIVE) {
       it('handles native responses', function () {
@@ -1651,59 +1662,63 @@ describe('AppNexusAdapter', function () {
       });
     }
 
-    it('supports configuring outstream renderers', function () {
-      const outstreamResponse = deepClone(response);
-      outstreamResponse.tags[0].ads[0].rtb.video = {};
-      outstreamResponse.tags[0].ads[0].renderer_url = 'renderer.js';
+    if (FEATURES.VIDEO) {
+      it('supports configuring outstream renderers', function () {
+        const outstreamResponse = deepClone(response);
+        outstreamResponse.tags[0].ads[0].rtb.video = {};
+        outstreamResponse.tags[0].ads[0].renderer_url = 'renderer.js';
 
-      const bidderRequest = {
-        bids: [{
-          bidId: '3db3773286ee59',
-          renderer: {
-            options: {
-              adText: 'configured'
+        const bidderRequest = {
+          bids: [{
+            bidId: '3db3773286ee59',
+            renderer: {
+              options: {
+                adText: 'configured'
+              }
+            },
+            mediaTypes: {
+              video: {
+                context: 'outstream'
+              }
             }
-          },
-          mediaTypes: {
-            video: {
-              context: 'outstream'
+          }]
+        };
+
+        const result = spec.interpretResponse({ body: outstreamResponse }, { bidderRequest });
+        expect(result[0].renderer.config).to.deep.equal(
+          bidderRequest.bids[0].renderer.options
+        );
+      });
+    }
+
+    if (FEATURES.VIDEO) {
+      it('should add deal_priority and deal_code', function () {
+        let responseWithDeal = deepClone(response);
+        responseWithDeal.tags[0].ads[0].ad_type = 'video';
+        responseWithDeal.tags[0].ads[0].deal_priority = 5;
+        responseWithDeal.tags[0].ads[0].deal_code = '123';
+        responseWithDeal.tags[0].ads[0].rtb.video = {
+          duration_ms: 1500,
+          player_width: 640,
+          player_height: 340,
+        };
+
+        let bidderRequest = {
+          bids: [{
+            bidId: '3db3773286ee59',
+            adUnitCode: 'code',
+            mediaTypes: {
+              video: {
+                context: 'adpod'
+              }
             }
-          }
-        }]
-      };
-
-      const result = spec.interpretResponse({ body: outstreamResponse }, { bidderRequest });
-      expect(result[0].renderer.config).to.deep.equal(
-        bidderRequest.bids[0].renderer.options
-      );
-    });
-
-    it('should add deal_priority and deal_code', function () {
-      let responseWithDeal = deepClone(response);
-      responseWithDeal.tags[0].ads[0].ad_type = 'video';
-      responseWithDeal.tags[0].ads[0].deal_priority = 5;
-      responseWithDeal.tags[0].ads[0].deal_code = '123';
-      responseWithDeal.tags[0].ads[0].rtb.video = {
-        duration_ms: 1500,
-        player_width: 640,
-        player_height: 340,
-      };
-
-      let bidderRequest = {
-        bids: [{
-          bidId: '3db3773286ee59',
-          adUnitCode: 'code',
-          mediaTypes: {
-            video: {
-              context: 'adpod'
-            }
-          }
-        }]
-      }
-      let result = spec.interpretResponse({ body: responseWithDeal }, { bidderRequest });
-      expect(Object.keys(result[0].appnexus)).to.include.members(['buyerMemberId', 'dealPriority', 'dealCode']);
-      expect(result[0].video.dealTier).to.equal(5);
-    });
+          }]
+        }
+        let result = spec.interpretResponse({ body: responseWithDeal }, { bidderRequest });
+        expect(Object.keys(result[0].appnexus)).to.include.members(['buyerMemberId', 'dealPriority', 'dealCode']);
+        expect(result[0].video.dealTier).to.equal(5);
+      });
+    }
 
     it('should add advertiser id', function () {
       let responseAdvertiserId = deepClone(response);

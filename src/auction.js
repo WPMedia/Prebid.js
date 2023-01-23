@@ -462,7 +462,7 @@ export function auctionCallbacks(auctionDone, auctionInstance, {index = auctionM
     handleBidResponse(adUnitCode, bid, (done) => {
       let bidResponse = getPreparedBidForAuction(bid);
 
-      if (bidResponse.mediaType === VIDEO) {
+      if (FEATURES.VIDEO && bidResponse.mediaType === VIDEO) {
         tryAddVideoBid(auctionInstance, bidResponse, done);
       } else {
         if (FEATURES.NATIVE && bidResponse.native != null && typeof bidResponse.native === 'object') {
@@ -771,7 +771,7 @@ function setupBidTargeting(bidObject) {
  */
 export function getMediaTypeGranularity(mediaType, mediaTypes, mediaTypePriceGranularity) {
   if (mediaType && mediaTypePriceGranularity) {
-    if (mediaType === VIDEO) {
+    if (FEATURES.VIDEO && mediaType === VIDEO) {
       const context = deepAccess(mediaTypes, `${VIDEO}.context`, 'instream');
       if (mediaTypePriceGranularity[`${VIDEO}-${context}`]) {
         return mediaTypePriceGranularity[`${VIDEO}-${context}`];
