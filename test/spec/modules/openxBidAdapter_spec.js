@@ -5,7 +5,6 @@ import {BANNER, VIDEO} from 'src/mediaTypes.js';
 import {userSync} from 'src/userSync.js';
 import {config} from 'src/config.js';
 import * as utils from 'src/utils.js';
-import features from 'core-js-pure/features';
 
 const URLBASE = '/w/1.0/arj';
 const URLBASEVIDEO = '/v/1.0/avjp';
