@@ -178,7 +178,7 @@ function getImpression(bidRequest) {
   if (mediaTypesBanner) {
     mediaTypes[BANNER] = banner(bidRequest);
   }
-  if (mediaTypesVideo) {
+  if (FEATURES.VIDEO && mediaTypesVideo) {
     mediaTypes[VIDEO] = video(bidRequest);
   }
 
@@ -241,75 +241,77 @@ function banner(bid) {
 }
 
 function video(bid) {
-  let minduration = utils.deepAccess(bid, 'mediaTypes.video.minduration');
-  const maxduration = utils.deepAccess(bid, 'mediaTypes.video.maxduration');
-  const playerSize = utils.deepAccess(bid, 'mediaTypes.video.playerSize');
-  const api = utils.deepAccess(bid, 'mediaTypes.video.api');
-  const mimes = utils.deepAccess(bid, 'mediaTypes.video.mimes');
-  const placement = utils.deepAccess(bid, 'mediaTypes.video.placement');
-  const protocols = utils.deepAccess(bid, 'mediaTypes.video.protocols');
-  const playbackmethod = utils.deepAccess(bid, 'mediaTypes.video.playbackmethod');
-  const pos = utils.deepAccess(bid, 'mediaTypes.video.pos');
-  const startdelay = utils.deepAccess(bid, 'mediaTypes.video.startdelay');
-  const skip = utils.deepAccess(bid, 'mediaTypes.video.skip');
-  const skipmin = utils.deepAccess(bid, 'mediaTypes.video.skipmin');
-  const skipafter = utils.deepAccess(bid, 'mediaTypes.video.skipafter');
-  const minbitrate = utils.deepAccess(bid, 'mediaTypes.video.minbitrate');
-  const maxbitrate = utils.deepAccess(bid, 'mediaTypes.video.maxbitrate');
+  if (FEATURES.VIDEO) {
+    let minduration = utils.deepAccess(bid, 'mediaTypes.video.minduration');
+    const maxduration = utils.deepAccess(bid, 'mediaTypes.video.maxduration');
+    const playerSize = utils.deepAccess(bid, 'mediaTypes.video.playerSize');
+    const api = utils.deepAccess(bid, 'mediaTypes.video.api');
+    const mimes = utils.deepAccess(bid, 'mediaTypes.video.mimes');
+    const placement = utils.deepAccess(bid, 'mediaTypes.video.placement');
+    const protocols = utils.deepAccess(bid, 'mediaTypes.video.protocols');
+    const playbackmethod = utils.deepAccess(bid, 'mediaTypes.video.playbackmethod');
+    const pos = utils.deepAccess(bid, 'mediaTypes.video.pos');
+    const startdelay = utils.deepAccess(bid, 'mediaTypes.video.startdelay');
+    const skip = utils.deepAccess(bid, 'mediaTypes.video.skip');
+    const skipmin = utils.deepAccess(bid, 'mediaTypes.video.skipmin');
+    const skipafter = utils.deepAccess(bid, 'mediaTypes.video.skipafter');
+    const minbitrate = utils.deepAccess(bid, 'mediaTypes.video.minbitrate');
+    const maxbitrate = utils.deepAccess(bid, 'mediaTypes.video.maxbitrate');
 
-  if (!minduration || !utils.isInteger(minduration)) {
-    minduration = 0;
-  }
-  let video = {
-    minduration: minduration,
-    maxduration: maxduration,
-    api: api,
-    mimes: mimes,
-    placement: placement,
-    protocols: protocols
-  };
-
-  if (typeof playerSize !== 'undefined') {
-    if (utils.isArray(playerSize[0])) {
-      video.w = parseInt(playerSize[0][0]);
-      video.h = parseInt(playerSize[0][1]);
-    } else if (utils.isNumber(playerSize[0])) {
-      video.w = parseInt(playerSize[0]);
-      video.h = parseInt(playerSize[1]);
+    if (!minduration || !utils.isInteger(minduration)) {
+      minduration = 0;
     }
-  }
+    let video = {
+      minduration: minduration,
+      maxduration: maxduration,
+      api: api,
+      mimes: mimes,
+      placement: placement,
+      protocols: protocols
+    };
 
-  if (playbackmethod) {
-    video.playbackmethod = playbackmethod;
-  }
-  if (pos) {
-    video.pos = pos;
-  }
-  if (startdelay && utils.isInteger(startdelay)) {
-    video.startdelay = startdelay;
-  }
-  if (skip && (skip === 0 || skip === 1)) {
-    video.skip = skip;
-  }
-  if (skipmin && utils.isInteger(skipmin)) {
-    video.skipmin = skipmin;
-  }
-  if (skipafter && utils.isInteger(skipafter)) {
-    video.skipafter = skipafter;
-  }
-  if (minbitrate && utils.isInteger(minbitrate)) {
-    video.minbitrate = minbitrate;
-  }
-  if (maxbitrate && utils.isInteger(maxbitrate)) {
-    video.maxbitrate = maxbitrate;
-  }
+    if (typeof playerSize !== 'undefined') {
+      if (utils.isArray(playerSize[0])) {
+        video.w = parseInt(playerSize[0][0]);
+        video.h = parseInt(playerSize[0][1]);
+      } else if (utils.isNumber(playerSize[0])) {
+        video.w = parseInt(playerSize[0]);
+        video.h = parseInt(playerSize[1]);
+      }
+    }
 
-  const battr = utils.deepAccess(bid, 'ortb2Imp.battr');
-  if (battr) {
-    video.battr = battr;
-  }
+    if (playbackmethod) {
+      video.playbackmethod = playbackmethod;
+    }
+    if (pos) {
+      video.pos = pos;
+    }
+    if (startdelay && utils.isInteger(startdelay)) {
+      video.startdelay = startdelay;
+    }
+    if (skip && (skip === 0 || skip === 1)) {
+      video.skip = skip;
+    }
+    if (skipmin && utils.isInteger(skipmin)) {
+      video.skipmin = skipmin;
+    }
+    if (skipafter && utils.isInteger(skipafter)) {
+      video.skipafter = skipafter;
+    }
+    if (minbitrate && utils.isInteger(minbitrate)) {
+      video.minbitrate = minbitrate;
+    }
+    if (maxbitrate && utils.isInteger(maxbitrate)) {
+      video.maxbitrate = maxbitrate;
+    }
 
-  return video;
+    const battr = utils.deepAccess(bid, 'ortb2Imp.battr');
+    if (battr) {
+      video.battr = battr;
+    }
+
+    return video;
+  }
 }
 
 export const spec = {
@@ -363,7 +365,7 @@ export const spec = {
       return false;
     }
 
-    if (mediaTypesVideo) {
+    if (FEATURES.VIDEO && mediaTypesVideo) {
       if (!mediaTypesVideo.maxduration || !utils.isInteger(mediaTypesVideo.maxduration)) {
         utils.logWarn(BIDDER_CODE + ': mediaTypes.video.maxduration must be set to the maximum video ad duration in seconds');
         return false;
@@ -490,7 +492,7 @@ export const spec = {
               mediaType: BANNER
             }
           );
-        } else if (bid.ext.mediatype === MEDIA_TYPE.VIDEO) {
+        } else if (FEATURES.VIDEO && bid.ext.mediatype === MEDIA_TYPE.VIDEO) {
           Object.assign(
             bidResponse,
             {
