@@ -180,65 +180,67 @@ function bidToBannerImp(bid) {
  * @return {object}     A impression object that will be sent to ad server.
  */
 function bidToVideoImp(bid) {
-  const imp = bidToImp(bid, VIDEO);
-  const videoAdUnitRef = deepAccess(bid, 'mediaTypes.video');
-  const videoParamRef = deepAccess(bid, 'params.video');
-  const videoParamErrors = checkVideoParams(videoAdUnitRef, videoParamRef);
-  if (videoParamErrors.length) {
-    return {};
-  }
-
-  imp.video = videoParamRef ? deepClone(bid.params.video) : {};
-  // populate imp level transactionId
-  imp.ext.tid = deepAccess(bid, 'ortb2Imp.ext.tid');
-
-  // copy all video properties to imp object
-  for (const adUnitProperty in videoAdUnitRef) {
-    if (VIDEO_PARAMS_ALLOW_LIST.indexOf(adUnitProperty) !== -1 && !imp.video.hasOwnProperty(adUnitProperty)) {
-      imp.video[adUnitProperty] = videoAdUnitRef[adUnitProperty];
-    }
-  }
-
-  if (imp.video.minduration > imp.video.maxduration) {
-    logError(
-      `IX Bid Adapter: video minduration [${imp.video.minduration}] cannot be greater than video maxduration [${imp.video.maxduration}]`,
-      { bidder: BIDDER_CODE, code: ERROR_CODES.VIDEO_DURATION_INVALID }
-    );
-    return {};
-  }
-
-  const context = (videoParamRef && videoParamRef.context) || (videoAdUnitRef && videoAdUnitRef.context);
-
-  // if placement not already defined, pick one based on `context`
-  if (context && !imp.video.hasOwnProperty('placement')) {
-    if (context === INSTREAM) {
-      imp.video.placement = 1;
-    } else if (context === OUTSTREAM) {
-      if (deepAccess(videoParamRef, 'playerConfig.floatOnScroll')) {
-        imp.video.placement = 5;
-      } else {
-        imp.video.placement = 4;
-      }
-    } else {
-      logWarn(`IX Bid Adapter: Video context '${context}' is not supported`);
-    }
-  }
-
-  if (!(imp.video.w && imp.video.h)) {
-    // Getting impression Size
-    const impSize = getFirstSize(deepAccess(imp, 'video.playerSize')) || getFirstSize(deepAccess(bid, 'params.size'));
-    if (impSize) {
-      imp.video.w = impSize[0];
-      imp.video.h = impSize[1];
-    } else {
-      logWarn('IX Bid Adapter: Video size is missing in [mediaTypes.video]');
+  if (FEATURES.VIDEO) {
+    const imp = bidToImp(bid, VIDEO);
+    const videoAdUnitRef = deepAccess(bid, 'mediaTypes.video');
+    const videoParamRef = deepAccess(bid, 'params.video');
+    const videoParamErrors = checkVideoParams(videoAdUnitRef, videoParamRef);
+    if (videoParamErrors.length) {
       return {};
     }
+
+    imp.video = videoParamRef ? deepClone(bid.params.video) : {};
+    // populate imp level transactionId
+    imp.ext.tid = deepAccess(bid, 'ortb2Imp.ext.tid');
+
+    // copy all video properties to imp object
+    for (const adUnitProperty in videoAdUnitRef) {
+      if (VIDEO_PARAMS_ALLOW_LIST.indexOf(adUnitProperty) !== -1 && !imp.video.hasOwnProperty(adUnitProperty)) {
+        imp.video[adUnitProperty] = videoAdUnitRef[adUnitProperty];
+      }
+    }
+
+    if (imp.video.minduration > imp.video.maxduration) {
+      logError(
+        `IX Bid Adapter: video minduration [${imp.video.minduration}] cannot be greater than video maxduration [${imp.video.maxduration}]`,
+        { bidder: BIDDER_CODE, code: ERROR_CODES.VIDEO_DURATION_INVALID }
+      );
+      return {};
+    }
+
+    const context = (videoParamRef && videoParamRef.context) || (videoAdUnitRef && videoAdUnitRef.context);
+
+    // if placement not already defined, pick one based on `context`
+    if (context && !imp.video.hasOwnProperty('placement')) {
+      if (context === INSTREAM) {
+        imp.video.placement = 1;
+      } else if (context === OUTSTREAM) {
+        if (deepAccess(videoParamRef, 'playerConfig.floatOnScroll')) {
+          imp.video.placement = 5;
+        } else {
+          imp.video.placement = 4;
+        }
+      } else {
+        logWarn(`IX Bid Adapter: Video context '${context}' is not supported`);
+      }
+    }
+
+    if (!(imp.video.w && imp.video.h)) {
+    // Getting impression Size
+      const impSize = getFirstSize(deepAccess(imp, 'video.playerSize')) || getFirstSize(deepAccess(bid, 'params.size'));
+      if (impSize) {
+        imp.video.w = impSize[0];
+        imp.video.h = impSize[1];
+      } else {
+        logWarn('IX Bid Adapter: Video size is missing in [mediaTypes.video]');
+        return {};
+      }
+    }
+
+    _applyFloor(bid, imp, VIDEO);
+
+    return imp;
   }
-
-  _applyFloor(bid, imp, VIDEO);
-
-  return imp;
 }
 
 /**
@@ -287,7 +289,7 @@ function bidToImp(bid, mediaType) {
       case BANNER:
         imp.ext.siteID = bid.params.banner.siteId.toString();
         break;
-      case VIDEO:
+      case FEATURES.VIDEO && VIDEO:
         imp.ext.siteID = bid.params.video.siteId.toString();
         break;
       case NATIVE:
@@ -380,11 +382,14 @@ function parseBid(rawBid, currency, bidRequest) {
   bid.netRevenue = NET_REVENUE;
   bid.currency = currency;
   bid.creativeId = rawBid.hasOwnProperty('crid') ? rawBid.crid : '-';
-  // If mtype = video is passed and vastURl is not set, set vastxml
-  if (rawBid.mtype == MEDIA_TYPES.Video && ((rawBid.ext && !rawBid.ext.vasturl) || !rawBid.ext)) {
-    bid.vastXml = rawBid.adm;
-  } else if (rawBid.ext && rawBid.ext.vasturl) {
-    bid.vastUrl = rawBid.ext.vasturl;
+
+  if (FEATURES.VIDEO) {
+    // If mtype = video is passed and vastURl is not set, set vastxml
+    if (rawBid.mtype == MEDIA_TYPES.Video && ((rawBid.ext && !rawBid.ext.vasturl) || !rawBid.ext)) {
+      bid.vastXml = rawBid.adm;
+    } else if (rawBid.ext && rawBid.ext.vasturl) {
+      bid.vastUrl = rawBid.ext.vasturl;
+    }
   }
 
   let parsedAdm = null;
@@ -398,7 +403,7 @@ function parseBid(rawBid, currency, bidRequest) {
   }
 
   // in the event of a video
-  if ((rawBid.ext && rawBid.ext.vasturl) || rawBid.mtype == MEDIA_TYPES.Video) {
+  if (FEATURES.VIDEO && ((rawBid.ext && rawBid.ext.vasturl) || rawBid.mtype == MEDIA_TYPES.Video)) {
     bid.width = bidRequest.video.w;
     bid.height = bidRequest.video.h;
     bid.mediaType = VIDEO;
@@ -466,32 +471,34 @@ function includesSize(sizeArray = [], size = []) {
  * @returns {string[]}               Are the required video params available
  */
 function checkVideoParams(mediaTypeVideoRef, paramsVideoRef) {
-  const errorList = [];
+  if (FEATURES.VIDEO) {
+    const errorList = [];
 
-  if (!mediaTypeVideoRef) {
-    logWarn('IX Bid Adapter: mediaTypes.video is the preferred location for video params in ad unit');
-  }
-
-  for (let property of REQUIRED_VIDEO_PARAMS) {
-    const propInMediaType = mediaTypeVideoRef && mediaTypeVideoRef.hasOwnProperty(property);
-    const propInVideoRef = paramsVideoRef && paramsVideoRef.hasOwnProperty(property);
-
-    if (!propInMediaType && !propInVideoRef) {
-      errorList.push(`IX Bid Adapter: ${property} is not included in either the adunit or params level`);
+    if (!mediaTypeVideoRef) {
+      logWarn('IX Bid Adapter: mediaTypes.video is the preferred location for video params in ad unit');
     }
+
+    for (let property of REQUIRED_VIDEO_PARAMS) {
+      const propInMediaType = mediaTypeVideoRef && mediaTypeVideoRef.hasOwnProperty(property);
+      const propInVideoRef = paramsVideoRef && paramsVideoRef.hasOwnProperty(property);
+
+      if (!propInMediaType && !propInVideoRef) {
+        errorList.push(`IX Bid Adapter: ${property} is not included in either the adunit or params level`);
+      }
+    }
+
+    // check protocols/protocol
+    const protocolMediaType = mediaTypeVideoRef && mediaTypeVideoRef.hasOwnProperty('protocol');
+    const protocolsMediaType = mediaTypeVideoRef && mediaTypeVideoRef.hasOwnProperty('protocols');
+    const protocolVideoRef = paramsVideoRef && paramsVideoRef.hasOwnProperty('protocol');
+    const protocolsVideoRef = paramsVideoRef && paramsVideoRef.hasOwnProperty('protocols');
+
+    if (!(protocolMediaType || protocolsMediaType || protocolVideoRef || protocolsVideoRef)) {
+      errorList.push('IX Bid Adapter: protocol/protcols is not included in either the adunit or params level');
+    }
+
+    return errorList;
   }
-
-  // check protocols/protocol
-  const protocolMediaType = mediaTypeVideoRef && mediaTypeVideoRef.hasOwnProperty('protocol');
-  const protocolsMediaType = mediaTypeVideoRef && mediaTypeVideoRef.hasOwnProperty('protocols');
-  const protocolVideoRef = paramsVideoRef && paramsVideoRef.hasOwnProperty('protocol');
-  const protocolsVideoRef = paramsVideoRef && paramsVideoRef.hasOwnProperty('protocols');
-
-  if (!(protocolMediaType || protocolsMediaType || protocolVideoRef || protocolsVideoRef)) {
-    errorList.push('IX Bid Adapter: protocol/protcols is not included in either the adunit or params level');
-  }
-
-  return errorList;
 }
 
 /**
@@ -1009,16 +1016,18 @@ function buildIXDiag(validBidRequests) {
         ixdiag.bu++;
       }
 
-      if (deepAccess(bid, 'mediaTypes.video.context') === 'outstream') {
-        ixdiag.ou++;
+      if (FEATURES.VIDEO) {
+        if (deepAccess(bid, 'mediaTypes.video.context') === 'outstream') {
+          ixdiag.ou++;
 
-        if (isIndexRendererPreferred(bid)) {
-          ixdiag.ren = true;
+          if (isIndexRendererPreferred(bid)) {
+            ixdiag.ren = true;
+          }
         }
-      }
 
-      if (deepAccess(bid, 'mediaTypes.video.context') === 'instream') {
-        ixdiag.iu++;
+        if (deepAccess(bid, 'mediaTypes.video.context') === 'instream') {
+          ixdiag.iu++;
+        }
       }
 
       ixdiag.allu++;
@@ -1077,20 +1086,22 @@ function createNativeImps(validBidRequest, nativeImps) {
  * @param {object}  videoImps reference to created video impressions
  */
 function createVideoImps(validBidRequest, videoImps) {
-  const imp = bidToVideoImp(validBidRequest);
-  if (Object.keys(imp).length != 0) {
-    videoImps[validBidRequest.transactionId] = {};
-    videoImps[validBidRequest.transactionId].ixImps = [];
-    videoImps[validBidRequest.transactionId].ixImps.push(imp);
-    videoImps[validBidRequest.transactionId].gpid = deepAccess(validBidRequest, 'ortb2Imp.ext.gpid');
-    videoImps[validBidRequest.transactionId].dfp_ad_unit_code = deepAccess(validBidRequest, 'ortb2Imp.ext.data.adserver.adslot');
-    videoImps[validBidRequest.transactionId].pbadslot = deepAccess(validBidRequest, 'ortb2Imp.ext.data.pbadslot');
-    videoImps[validBidRequest.transactionId].tagId = deepAccess(validBidRequest, 'params.tagId');
+  if (FEATURES.VIDEO) {
+    const imp = bidToVideoImp(validBidRequest);
+    if (Object.keys(imp).length != 0) {
+      videoImps[validBidRequest.transactionId] = {};
+      videoImps[validBidRequest.transactionId].ixImps = [];
+      videoImps[validBidRequest.transactionId].ixImps.push(imp);
+      videoImps[validBidRequest.transactionId].gpid = deepAccess(validBidRequest, 'ortb2Imp.ext.gpid');
+      videoImps[validBidRequest.transactionId].dfp_ad_unit_code = deepAccess(validBidRequest, 'ortb2Imp.ext.data.adserver.adslot');
+      videoImps[validBidRequest.transactionId].pbadslot = deepAccess(validBidRequest, 'ortb2Imp.ext.data.pbadslot');
+      videoImps[validBidRequest.transactionId].tagId = deepAccess(validBidRequest, 'params.tagId');
 
-    const adUnitCode = validBidRequest.adUnitCode;
-    const divId = document.getElementById(adUnitCode) ? adUnitCode : getGptSlotInfoForAdUnitCode(adUnitCode).divId;
-    videoImps[validBidRequest.transactionId].adUnitCode = adUnitCode;
-    videoImps[validBidRequest.transactionId].divId = divId;
+      const adUnitCode = validBidRequest.adUnitCode;
+      const divId = document.getElementById(adUnitCode) ? adUnitCode : getGptSlotInfoForAdUnitCode(adUnitCode).divId;
+      videoImps[validBidRequest.transactionId].adUnitCode = adUnitCode;
+      videoImps[validBidRequest.transactionId].divId = divId;
+    }
   }
 }
 
@@ -1420,7 +1431,7 @@ export const spec = {
       }
     }
 
-    if (mediaTypeVideoRef && paramsVideoRef) {
+    if (FEATURES.VIDEO && mediaTypeVideoRef && paramsVideoRef) {
       const videoImp = bidToVideoImp(bid).video;
       const errorList = checkVideoParams(mediaTypeVideoRef, paramsVideoRef);
       if (deepAccess(bid, 'mediaTypes.video.context') === OUTSTREAM && isIndexRendererPreferred(bid) && videoImp) {
@@ -1467,7 +1478,7 @@ export const spec = {
           case BANNER:
             createBannerImps(validBidRequest, missingBannerSizes, bannerImps);
             break;
-          case VIDEO:
+          case FEATURES.VIDEO && VIDEO:
             createVideoImps(validBidRequest, videoImps)
             break;
           case NATIVE:
@@ -1505,7 +1516,7 @@ export const spec = {
     if (Object.keys(bannerImps).length > 0) {
       reqs.push(...buildRequest(validBidRequests, bidderRequest, bannerImps, BANNER_ENDPOINT_VERSION));
     }
-    if (Object.keys(videoImps).length > 0) {
+    if (FEATURES.VIDEO && Object.keys(videoImps).length > 0) {
       reqs.push(...buildRequest(validBidRequests, bidderRequest, videoImps, VIDEO_ENDPOINT_VERSION));
     }
     if (Object.keys(nativeImps).length > 0) {
@@ -1546,7 +1557,7 @@ export const spec = {
         const bidRequest = getBidRequest(innerBids[j].impid, requestBid.imp, bidderRequest.validBidRequests);
         bid = parseBid(innerBids[j], responseBody.cur, bidRequest);
 
-        if (bid.mediaType === VIDEO && isIndexRendererPreferred(bidRequest)) {
+        if (FEATURES.VIDEO && bid.mediaType === VIDEO && isIndexRendererPreferred(bidRequest)) {
           const renderUrl = deepAccess(responseBody, 'ext.videoplayerurl');
           bid.renderer = createRenderer(innerBids[j].bidId, renderUrl);
           if (!bid.renderer) {
